@@ -7,7 +7,8 @@ Ecosystem-wide patterns for Claude Code. When a KHAOS project needs to integrate
 | Seed | Purpose | Source Truth |
 |------|---------|-------------|
 | [seed-supabase.md](seed-supabase.md) | Supabase integration (two shapes: Next.js SSR + Service) | `be-part-of-net`, `khaos-researcher` |
-| [seed-pluto.md](seed-pluto.md) | Pluto system registry + watchdog dashboard | Original design |
+| [seed-pluto.md](seed-pluto.md) | Pluto system registry + watchdog dashboard (v2.2) | Original design |
+| [seed-health-endpoint.md](seed-health-endpoint.md) | Standard health endpoint shape for Pluto consumption (24h/7d/28d) | `apex-recruiting` |
 
 ## Usage
 

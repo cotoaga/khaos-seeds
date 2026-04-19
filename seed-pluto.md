@@ -1,8 +1,10 @@
 # 🌱 SEED: Pluto — The Friendly Watchdog from Hades
 
-**Version:** 2.1
+**Version:** 2.2
 **Depends on:** `seed-supabase.md` (Shape A — Next.js SSR Pattern)
 **Purpose:** A registry with a pulse. Every gem, app, script, and MCP server Kydroon has built gets a card. Some cards have vital signs. All cards have a home.
+
+**What changed in v2.2:** 30 systems (added KHAOS Map). Pulse cron now runs every 10 min (was 15). APEX special case removed — APEX now exposes `/api/health` with 24h/7d/28d windows; cron reads it like any other health endpoint. Funnel events corrected to match events APEX actually emits. `seed-health-endpoint.md` written as canonical health endpoint reference.
 
 **What changed in v2.1:** RLS enabled on all Pluto tables. Custom domain deployment changed the threat model — the anon key is now publicly callable. Read-only RLS for anon, service role bypasses for cron writes.
 
@@ -254,7 +256,7 @@ Both defined in `vercel.json`. Both protected by `Authorization: Bearer <CRON_SE
 ```json
 {
   "crons": [
-    { "path": "/api/cron/pulse",   "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/pulse",   "schedule": "*/10 * * * *" },
     { "path": "/api/cron/wallets", "schedule": "*/15 * * * *" }
   ],
   "functions": {
@@ -305,38 +307,30 @@ APEX Recruiter (`apex-recruiter`) is the flagship system. It gets different trea
 
 **Dashboard:** Full-width hero card at the top of the page. NOT in the quadrant grid. Shows a 7-heartbeat strip chart, full dev pulse zone, full usage pulse zone, and KHAOS commentary (signal detection).
 
-**Cron:** Queries `khaos_events` on APEX's own Supabase instance (separate URL + service key). Results go into `usage_pulse.events_7d` and `usage_pulse.unique_actors_7d`. Falls back gracefully if APEX env vars are missing.
+**Cron:** Reads APEX's `/api/health` endpoint like any other health endpoint. APEX exposes 24h/7d/28d aggregate windows — the cron normalises them into `UsagePulse` via the standard fallback chain. No cross-instance Supabase query needed.
 
 **Signals:** `lib/signals.ts` runs 6 detection rules on the APEX heartbeat to generate commentary text shown on the hero card.
-
-```typescript
-// lib/supabase/apex.ts
-export function createApexClient() {
-  return createClient(
-    process.env.APEX_SUPABASE_URL!,
-    process.env.APEX_SUPABASE_SERVICE_KEY!
-  )
-}
-```
 
 ---
 
 ## Health Endpoint Shape
 
-Any KHAOS system can expose a health endpoint and Pluto will auto-read it. The cron expects this JSON shape:
+Any KHAOS system can expose a health endpoint and Pluto will auto-read it. Full specification: **`seed-health-endpoint.md`**.
+
+The canonical shape (as implemented by APEX):
 
 ```json
 {
-  "usage_24h": {
-    "page_views_24h": 42,
-    "visitors_24h": 17,
-    "api_calls_24h": 0
-  },
-  "last_usage_at": "2026-04-14T18:30:00Z"
+  "status": "healthy",
+  "checked_at": "2026-04-19T18:00:00.000Z",
+  "usage_24h": { "events": 4, "unique_actors": 1, "event_types": { "cv.uploaded": 1 } },
+  "usage_7d":  { "events": 12, "unique_actors": 2, "event_types": { ... } },
+  "usage_28d": { "events": 47, "unique_actors": 3, "event_types": { ... } },
+  "last_usage_at": "2026-04-19T17:45:00.000Z"
 }
 ```
 
-The entire `usage_24h` object is spread into `usage_pulse` with `source: 'health_endpoint'` added. Any keys beyond the above are preserved. Libraries and scripts get `source: 'none'` and skip the health endpoint entirely.
+The cron normalises the response via a fallback chain (see `seed-health-endpoint.md` for details). Libraries and scripts get `source: 'none'` and skip the health endpoint entirely.
 
 Timeout: 5 seconds (`AbortSignal.timeout(5000)`). If the endpoint is slow or down, it's caught silently and the system gets `source: 'none'` for that heartbeat.
 
@@ -498,7 +492,7 @@ middleware.ts                   # Basic Auth (cron routes exempt)
 
 ---
 
-## Registered Systems (29)
+## Registered Systems (30)
 
 | id | name | type | has health endpoint |
 |----|------|------|-------------------|
@@ -531,6 +525,7 @@ middleware.ts                   # Basic Auth (cron routes exempt)
 | cotoaga-ai-gems | COTOAGA.AI Gems | site | no |
 | khaos-questor | KHAOS-Questor | app | yes (gems.cotoaga.ai) |
 | industrial-ai-complex | Industrial AI Complex | site | yes (gems.cotoaga.ai) |
+| khaos-map | KHAOS Map | site | no |
 
 `khaos-questor`, `industrial-ai-complex`, and `cotoaga-ai-gems` all share the repo `cotoaga/cotoaga-ai-gems`. Intentional.
 
@@ -561,9 +556,18 @@ middleware.ts                   # Basic Auth (cron routes exempt)
 - Triggered by custom domain deployment changing the threat model
 - Migration: `supabase/migrations/105_enable_rls.sql`
 
+**Phase 2.2 (v2.2) — Built**
+- 30 systems (added KHAOS Map via migration 111)
+- Pulse cron every 10 min (was 15)
+- APEX direct khaos_events query removed — APEX now exposes `/api/health` with 24h/7d/28d windows
+- Health endpoint normalisation updated: `u24.events` fallback for `api_calls_24h`, `usage_28d` extraction
+- Funnel events corrected: `match.reviewed` + `outreach.sent` replaced with `ki_match.requested` + `pitch.copied`
+- `seed-health-endpoint.md` written as canonical reference
+- Bark system (`pluto_barks`) added for down/degraded incident tracking
+- Alert mode (relaxed/vigilant/alert) configurable via `pluto_config`
+
 **Future (not yet built)**
 - Historical trend charts (heartbeats accumulate — data is there)
-- Alerts / notifications (the dog should bark)
 - MCP interface: "How's my universe?" conversation layer
 - Per-system drill-down pages
 - seed-health-endpoint.md — standard health endpoint shape for all KHAOS systems
